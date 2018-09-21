@@ -59,7 +59,10 @@ function getWatcher(key, _effect, model, onError, onEffect) {
       yield sagaEffects.put({ type: `${key}${NAMESPACE_SEP}@@end` });
       resolve(ret);
     } catch (e) {
-      onError(e);
+      onError(e, {
+        key,
+        effectArgs: args,
+      });
       if (!e._dontReject) {
         reject(e);
       }
@@ -101,10 +104,36 @@ function createEffects(model) {
     assertAction(type, 'sagaEffects.put');
     return sagaEffects.put({ ...action, type: prefixType(type, model) });
   }
+
+  // The operator `put` doesn't block waiting the returned promise to resolve.
+  // Using `put.resolve` will wait until the promsie resolve/reject before resuming.
+  // It will be helpful to organize multi-effects in order,
+  // and increase the reusability by seperate the effect in stand-alone pieces.
+  // https://github.com/redux-saga/redux-saga/issues/336
+  function putResolve(action) {
+    const { type } = action;
+    assertAction(type, 'sagaEffects.put.resolve');
+    return sagaEffects.put.resolve({
+      ...action,
+      type: prefixType(type, model),
+    });
+  }
+  put.resolve = putResolve;
+
   function take(type) {
     if (typeof type === 'string') {
       assertAction(type, 'sagaEffects.take');
       return sagaEffects.take(prefixType(type, model));
+    } else if (Array.isArray(type)) {
+      return sagaEffects.take(
+        type.map(t => {
+          if (typeof t === 'string') {
+            assertAction(t, 'sagaEffects.take');
+            return prefixType(t, model);
+          }
+          return t;
+        })
+      );
     } else {
       return sagaEffects.take(type);
     }

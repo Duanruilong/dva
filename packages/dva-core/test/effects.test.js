@@ -56,6 +56,42 @@ describe('effects', () => {
     }, 200);
   });
 
+  it('put multi effects in order', done => {
+    const app = create();
+    app.model({
+      namespace: 'counter',
+      state: {
+        count: 0,
+        resolveCount: 0,
+      },
+      reducers: {
+        dump(state, { payload }) {
+          return {
+            ...state,
+            ...payload,
+          };
+        },
+      },
+      effects: {
+        *changeCountDelay({ payload }, { put, call }) {
+          yield call(delay, 200);
+          yield put({ type: 'dump', payload: { count: payload } });
+        },
+        *process({ payload }, { put, select }) {
+          yield put.resolve({ type: 'changeCountDelay', payload });
+          const count = yield select(state => state.counter.count);
+          yield put({ type: 'dump', payload: { resolveCount: count } });
+        },
+      },
+    });
+    app.start();
+    app._store.dispatch({ type: 'counter/process', payload: 1 }).then(() => {
+      expect(app._store.getState().counter.resolveCount).toEqual(1);
+      done();
+    });
+    expect(app._store.getState().counter.resolveCount).toEqual(0);
+  });
+
   it('take', done => {
     const app = create();
     app.model({
@@ -85,6 +121,47 @@ describe('effects', () => {
       expect(app._store.getState().count).toEqual(4);
       done();
     }, 300);
+  });
+
+  it('take with array of actions', () => {
+    const app = create();
+    let takenCount = 0;
+    app.model({
+      namespace: 'count',
+      state: null,
+      reducers: {
+        addRequest() {
+          return 1;
+        },
+        addFailure() {
+          return -1;
+        },
+        addSuccess() {
+          return 0;
+        },
+      },
+      effects: {
+        *add(action, { put }) {
+          yield put({ type: 'addRequest' });
+          if (action.amount > 0.5) {
+            yield put({ type: 'addSuccess' });
+          } else {
+            yield put({ type: 'addFailure' });
+          }
+        },
+        *test(action, { put, take }) {
+          yield put({ type: 'add', amount: action.amount });
+          yield take(['addSuccess', 'addFailure']);
+          takenCount += 1;
+        },
+      },
+    });
+    app.start();
+    app._store.dispatch({ type: 'count/test', amount: 0 });
+    expect(app._store.getState().count).toEqual(-1);
+    app._store.dispatch({ type: 'count/test', amount: 1 });
+    expect(app._store.getState().count).toEqual(0);
+    expect(takenCount).toEqual(2);
   });
 
   it('dispatch action for other models', () => {
@@ -145,6 +222,46 @@ describe('effects', () => {
     expect(app._store.getState().count).toEqual(1);
     app._store.dispatch({ type: 'count/addDelay', payload: 2 });
     expect(app._store.getState().count).toEqual(3);
+  });
+
+  it('onError: extension', () => {
+    const app = create({
+      onError(err, dispatch, extension) {
+        err.preventDefault();
+        dispatch({
+          type: 'err/append',
+          payload: extension,
+        });
+      },
+    });
+    app.model({
+      namespace: 'err',
+      state: [],
+      reducers: {
+        append(state, action) {
+          return [...state, action.payload];
+        },
+      },
+      effects: {
+        // eslint-disable-next-line
+        *generate() {
+          throw new Error('Effect error');
+        },
+      },
+    });
+    app.start();
+    app._store.dispatch({
+      type: 'err/generate',
+      payload: 'err.payload',
+    });
+    expect(app._store.getState().err.length).toEqual(1);
+    expect(app._store.getState().err[0].key).toEqual('err/generate');
+    expect(app._store.getState().err[0].effectArgs[0].type).toEqual(
+      'err/generate'
+    );
+    expect(app._store.getState().err[0].effectArgs[0].payload).toEqual(
+      'err.payload'
+    );
   });
 
   it('type: takeLatest', done => {
@@ -400,7 +517,6 @@ describe('effects', () => {
     expect(p2).toEqual({ type: 'count/add', payload: 2 });
     expect(app._store.getState().count).toEqual(2);
     p1.then(count => {
-      console.log('test', count);
       expect(count).toEqual(4);
       expect(app._store.getState().count).toEqual(4);
       done();

@@ -1,8 +1,11 @@
+---
+sidebarDepth: 2
+---
+
 # API
 
-[View this in English](./API.md)
-
 ## 输出文件
+
 ### dva
 
 默认输出文件。
@@ -50,6 +53,7 @@ const UserPageComponent = dynamic({
 * component：返回 Promise 的函数，Promise 返回 React Component
 
 ## dva API
+
 ### `app = dva(opts)`
 
 创建应用，返回 dva 实例。(注：dva 支持多实例)
@@ -161,8 +165,6 @@ const app = dva({
 });
 ```
 
-详见 [examples/count-undo](https://github.com/dvajs/dva/blob/master/examples/count-undo/index.js) 。
-
 #### `onEffect(fn)`
 
 封装 effect 执行。比如 [dva-loading](https://github.com/dvajs/dva-loading) 基于此实现了自动处理 loading 状态。
@@ -203,6 +205,14 @@ persistStore(app._store);
 ### `app.unmodel(namespace)`
 
 取消 model 注册，清理 reducers, effects 和 subscriptions。subscription 如果没有返回 unlisten 函数，使用 `app.unmodel` 会给予警告⚠️。
+
+### `app.replaceModel(model)`
+
+> 只在app.start()之后可用
+
+替换model为新model，清理旧model的reducers, effects 和 subscriptions，但会保留旧的state状态，对于HMR非常有用。subscription 如果没有返回 unlisten 函数，使用 `app.unmodel` 会给予警告⚠️。 
+
+如果原来不存在相同namespace的model，那么执行`app.model`操作
 
 ### `app.router(({ history, app }) => RouterConfig)`
 
@@ -297,7 +307,7 @@ model 的命名空间，同时也是他在全局 state 上的属性，只能用�
 
 比如：
 
-```
+```js
 const app = dva({
   initialState: { count: 1 },
 });
@@ -315,7 +325,7 @@ app.model({
 
 格式为 `(state, action) => newState` 或 `[(state, action) => newState, enhancer]`。
 
-详见： https://github.com/dvajs/dva/blob/master/packages/dva-core/test/reducers-test.js
+详见： https://github.com/dvajs/dva/blob/master/packages/dva-core/test/reducers.test.js
 
 ### effects
 
@@ -330,7 +340,7 @@ type 类型有：
 * `throttle`
 * `watcher`
 
-详见：https://github.com/dvajs/dva/blob/master/packages/dva-core/test/effects-test.js
+详见：https://github.com/dvajs/dva/blob/master/packages/dva-core/test/effects.test.js
 
 ### subscriptions
 

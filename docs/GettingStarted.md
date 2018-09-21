@@ -101,7 +101,7 @@ app.model({
 
 ## Write components
 
-After designing the model, we begin to write component. We recommend organizing the Component with [stateless functions](https://facebook.github.io/react/docs/reusable-components.html#stateless-functions) because we don't need state almost at all in dva architecture.
+After designing the model, we begin to write the component. We recommend organizing the Component with [stateless functions](https://facebook.github.io/react/docs/reusable-components.html#stateless-functions) because we don't need state almost at all in dva architecture.
 
 ```javascript
 import styles from './index.less';
@@ -258,7 +258,8 @@ In this app, when the user clicks the + button, the value will increase by 1 and
 app.model({
   namespace: 'count',
 + effects: {
-+   *add(action, { call, put }) {
++   *addThenMinus(action, { call, put }) {
++     yield put({ type: 'add' });
 +     yield call(delay, 1000);
 +     yield put({ type: 'minus' });
 +   },
@@ -269,6 +270,22 @@ app.model({
 +    setTimeout(resolve, timeout);
 +  });
 +}
+```
+
+```diff
+import styles from './index.less';
+const CountApp = ({count, dispatch}) => {
+  return (
+    <div className={styles.normal}>
+      <div className={styles.record}>Highest Record: {count.record}</div>
+      <div className={styles.current}>{count.current}</div>
+      <div className={styles.button}>
+-       <button onClick={() => { dispatch({type: 'count/add'}); }}>+</button>
++       <button onClick={() => { dispatch({type: 'count/addThenMinus'}); }}>+</button>
+      </div>
+    </div>
+  );
+};
 ```
 
 Note:
@@ -295,7 +312,7 @@ app.model({
   namespace: 'count',
 + subscriptions: {
 +   keyboardWatcher({ dispatch }) {
-+     key('⌘+up, ctrl+up', () => { dispatch({type:'add'}) });
++     key('⌘+up, ctrl+up', () => { dispatch({type:'addThenMinus'}) });
 +   },
 + },
 });
@@ -344,14 +361,15 @@ app.model({
     },
   },
   effects: {
-    *add(action, { call, put }) {
+    *addThenMinus(action, { call, put }) {
+      yield put({ type: 'add' });
       yield call(delay, 1000);
       yield put({ type: 'minus' });
     },
   },
   subscriptions: {
     keyboardWatcher({ dispatch }) {
-      key('⌘+up, ctrl+up', () => { dispatch({type:'add'}) });
+      key('⌘+up, ctrl+up', () => { dispatch({type:'addThenMinus'}) });
     },
   },
 });
@@ -362,7 +380,7 @@ const CountApp = ({count, dispatch}) => {
       <div className={styles.record}>Highest Record: {count.record}</div>
       <div className={styles.current}>{count.current}</div>
       <div className={styles.button}>
-        <button onClick={() => { dispatch({type: 'count/add'}); }}>+</button>
+        <button onClick={() => { dispatch({type: 'count/addThenMinus'}); }}>+</button>
       </div>
     </div>
   );

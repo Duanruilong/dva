@@ -12,7 +12,7 @@ import {
   run as runSubscription,
   unlisten as unlistenSubscription,
 } from './subscription';
-import { noop } from './utils';
+import { noop, findIndex } from './utils';
 
 // Internal model to update global state when do unmodel
 const dvaModel = {
@@ -78,7 +78,7 @@ export function create(hooksAndOpts = {}, createOpts = {}) {
       m.state,
       plugin._handleActions
     );
-    store.replaceReducer(createReducer(store.asyncReducers));
+    store.replaceReducer(createReducer());
     if (m.effects) {
       store.runSaga(
         app._getSaga(m.effects, m, onError, plugin.get('onEffect'))
@@ -125,13 +125,54 @@ export function create(hooksAndOpts = {}, createOpts = {}) {
   }
 
   /**
+   * Replace a model if it exsits, if not, add it to app
+   * Attention:
+   * - Only available after dva.start gets called
+   * - Will not check origin m is strict equal to the new one
+   * Useful for HMR
+   * @param createReducer
+   * @param reducers
+   * @param unlisteners
+   * @param onError
+   * @param m
+   */
+  function replaceModel(createReducer, reducers, unlisteners, onError, m) {
+    const store = app._store;
+    const { namespace } = m;
+    const oldModelIdx = findIndex(
+      app._models,
+      model => model.namespace === namespace
+    );
+
+    if (~oldModelIdx) {
+      // Cancel effects
+      store.dispatch({ type: `${namespace}/@@CANCEL_EFFECTS` });
+
+      // Delete reducers
+      delete store.asyncReducers[namespace];
+      delete reducers[namespace];
+
+      // Unlisten subscrioptions
+      unlistenSubscription(unlisteners, namespace);
+
+      // Delete model from app._models
+      app._models.splice(oldModelIdx, 1);
+    }
+
+    // add new version model to store
+    app.model(m);
+
+    store.dispatch({ type: '@@dva/UPDATE' });
+  }
+
+  /**
    * Start the app.
    *
    * @returns void
    */
   function start() {
     // Global error handler
-    const onError = err => {
+    const onError = (err, extension) => {
       if (err) {
         if (typeof err === 'string') err = new Error(err);
         err.preventDefault = () => {
@@ -139,7 +180,7 @@ export function create(hooksAndOpts = {}, createOpts = {}) {
         };
         plugin.apply('onError', err => {
           throw new Error(err.stack || err);
-        })(err, app._store.dispatch);
+        })(err, app._store.dispatch, extension);
       }
     };
 
@@ -212,6 +253,13 @@ export function create(hooksAndOpts = {}, createOpts = {}) {
     // Setup app.model and app.unmodel
     app.model = injectModel.bind(app, createReducer, onError, unlisteners);
     app.unmodel = unmodel.bind(app, createReducer, reducers, unlisteners);
+    app.replaceModel = replaceModel.bind(
+      app,
+      createReducer,
+      reducers,
+      unlisteners,
+      onError
+    );
 
     /**
      * Create global reducer for redux.

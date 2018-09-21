@@ -1,6 +1,6 @@
 # API
 
-[以中文版查看此文](./API_zh-CN.md)
+[以中文版查看此文](https://dvajs.com/api/)
 
 ## Export Files
 ### dva
@@ -163,8 +163,6 @@ const app = dva({
 });
 ```
 
-View [examples/count-undo](https://github.com/dvajs/dva/blob/master/examples/count-undo/index.js) for details.
-
 #### `onEffect(fn)`
 
 Wrap effect execute.
@@ -211,6 +209,14 @@ Register model, view [#Model](#model)  for details.
 ### `app.unmodel(namespace)`
 
 Unregister model.
+
+### `app.replaceModel(model)`
+
+> Only available after `app.start()` got called
+
+Replace an existing model with a new one, comparing by the namespace. If no one matches, add the new one. 
+
+After called, old `reducers`, `effects`, `subscription` will be replaced with the new ones, while original state is kept, which means it's useful for HMR.
 
 ### `app.router(({ history, app }) => RouterConfig)`
 
@@ -323,7 +329,7 @@ Store reducers in key/value Object. reducer is the only place to modify `state`.
 
 `(state, action) => newState` or `[(state, action) => newState, enhancer]`
 
-View https://github.com/dvajs/dva/blob/master/packages/dva-core/test/reducers-test.js for details.
+View https://github.com/dvajs/dva/blob/master/packages/dva-core/test/reducers.test.js for details.
 
 ### effects
 
@@ -338,7 +344,7 @@ type includes:
 * `throttle`
 * `watcher`
 
-View https://github.com/dvajs/dva/blob/master/packages/dva-core/test/effects-test.js for details.
+View https://github.com/dvajs/dva/blob/master/packages/dva-core/test/effects.test.js for details.
 
 ### subscriptions
 
@@ -346,4 +352,4 @@ Store subscriptions in key/value Object. Subscription is used for subscribing da
 
 `({ dispatch, history }, done) => unlistenFunction`
 
-Notice: if we want to unregister a model with `app.unmodel()`, it's subscriptions must return unsubscribe method.
+Notice: if we want to unregister a model with `app.unmodel()` or `app.replaceModel()`, it's subscriptions must return unsubscribe method.
