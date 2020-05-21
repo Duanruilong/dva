@@ -1,4 +1,5 @@
 import expect from 'expect';
+import mm from 'mm';
 import { create } from '../src/index';
 
 const delay = timeout => new Promise(resolve => setTimeout(resolve, timeout));
@@ -30,8 +31,8 @@ describe('effects', () => {
     }, 200);
   });
 
-  it('put action with namespace will get a warning', done => {
-    const app = create();
+  function testAppCreator(opts) {
+    const app = create(opts);
     app.model({
       namespace: 'count',
       state: 0,
@@ -41,19 +42,52 @@ describe('effects', () => {
         },
       },
       effects: {
-        *addDelay({ payload }, { put, call }) {
-          yield call(delay, 100);
+        *putWithNamespace({ payload }, { put }) {
+          yield put({ type: 'count/add', payload });
+        },
+        *putWithoutNamespace({ payload }, { put }) {
           yield put({ type: 'add', payload });
         },
       },
     });
+    return app;
+  }
+
+  it('put action with namespace will get a warning', () => {
+    const app = testAppCreator();
+    const logs = [];
+    mm(console, 'error', log => {
+      logs.push(log);
+    });
     app.start();
-    app._store.dispatch({ type: 'count/addDelay', payload: 2 });
     expect(app._store.getState().count).toEqual(0);
-    setTimeout(() => {
-      expect(app._store.getState().count).toEqual(2);
-      done();
-    }, 200);
+    expect(logs.length).toEqual(0);
+    app._store.dispatch({ type: 'count/putWithNamespace', payload: 2 });
+    expect(logs.length).toEqual(1);
+    expect(logs[0]).toEqual(
+      'Warning: [sagaEffects.put] count/add should not be prefixed with namespace count',
+    );
+    app._store.dispatch({ type: 'count/putWithoutNamespace', payload: 2 });
+    expect(logs.length).toEqual(1);
+    expect(app._store.getState().count).toEqual(4);
+    mm.restore();
+  });
+
+  it('test disable namespacePrefixWarning', () => {
+    const app = testAppCreator({ namespacePrefixWarning: false });
+    const logs = [];
+    mm(console, 'error', log => {
+      logs.push(log);
+    });
+    app.start();
+    expect(app._store.getState().count).toEqual(0);
+    expect(logs.length).toEqual(0);
+    app._store.dispatch({ type: 'count/putWithNamespace', payload: 2 });
+    expect(logs.length).toEqual(0);
+    app._store.dispatch({ type: 'count/putWithoutNamespace', payload: 2 });
+    expect(logs.length).toEqual(0);
+    expect(app._store.getState().count).toEqual(4);
+    mm.restore();
   });
 
   it('put multi effects in order', done => {
@@ -256,12 +290,8 @@ describe('effects', () => {
     });
     expect(app._store.getState().err.length).toEqual(1);
     expect(app._store.getState().err[0].key).toEqual('err/generate');
-    expect(app._store.getState().err[0].effectArgs[0].type).toEqual(
-      'err/generate'
-    );
-    expect(app._store.getState().err[0].effectArgs[0].payload).toEqual(
-      'err.payload'
-    );
+    expect(app._store.getState().err[0].effectArgs[0].type).toEqual('err/generate');
+    expect(app._store.getState().err[0].effectArgs[0].payload).toEqual('err.payload');
   });
 
   it('type: takeLatest', done => {
@@ -305,7 +335,7 @@ describe('effects', () => {
       effects: {
         addDelay: [
           function*() {
-            console.log(1);
+            yield console.log(1);
           },
           { type: 'throttle' },
         ],
@@ -329,7 +359,7 @@ describe('effects', () => {
       effects: {
         addDelay: [
           function*({ payload }, { call, put }) {
-            yield call(delay, 100);
+            yield call(delay, 120);
             yield put({ type: 'add', payload });
           },
           { type: 'throttle', ms: 100 },
@@ -384,6 +414,193 @@ describe('effects', () => {
     }, 200);
   });
 
+  it('type: poll', done => {
+    const app = create();
+    app.model({
+      namespace: 'count',
+      state: 0,
+      reducers: {
+        add(state, { payload }) {
+          return state + payload || 1;
+        },
+      },
+      effects: {
+        pollAdd: [
+          function*(_, { put }) {
+            yield put({ type: 'add', payload: 1 });
+          },
+          { type: 'poll', delay: 1000 },
+        ],
+      },
+    });
+    app.start();
+
+    app._store.dispatch({ type: 'count/pollAdd-start' });
+
+    setTimeout(() => {
+      app._store.dispatch({ type: 'count/pollAdd-stop' });
+      expect(app._store.getState().count).toEqual(2);
+      done();
+    }, 2000);
+  });
+
+  it('type: poll and stop', done => {
+    const app = create();
+    app.model({
+      namespace: 'count',
+      state: 0,
+      reducers: {
+        add(state, { payload }) {
+          return state + payload || 1;
+        },
+      },
+      effects: {
+        pollAdd: [
+          function*(_, { put }) {
+            yield put({ type: 'add', payload: 1 });
+          },
+          { type: 'poll', delay: 1000 },
+        ],
+      },
+    });
+    app.start();
+
+    app._store.dispatch({ type: 'count/pollAdd-start' });
+    // should work one time
+    app._store.dispatch({ type: 'count/pollAdd-stop' });
+
+    setTimeout(() => {
+      expect(app._store.getState().count).toEqual(1);
+      done();
+    }, 200);
+  });
+
+  it('type: poll with payload', done => {
+    const app = create();
+    app.model({
+      namespace: 'count',
+      state: 0,
+      reducers: {
+        add(state, { payload }) {
+          return state + payload || 1;
+        },
+      },
+      effects: {
+        pollAdd: [
+          function*({ payload }, { put }) {
+            yield put({ type: 'add', payload });
+          },
+          { type: 'poll', delay: 1000 },
+        ],
+      },
+    });
+    app.start();
+
+    app._store.dispatch({ type: 'count/pollAdd-start', payload: 2 });
+
+    setTimeout(() => {
+      app._store.dispatch({ type: 'count/pollAdd-stop' });
+      expect(app._store.getState().count).toEqual(4);
+      done();
+    }, 2000);
+  });
+
+  it('type: poll, start many time', done => {
+    const app = create();
+    app.model({
+      namespace: 'count',
+      state: 0,
+      reducers: {
+        add(state, { payload }) {
+          return state + payload || 1;
+        },
+      },
+      effects: {
+        pollAdd: [
+          function*({ payload }, { put }) {
+            yield put({ type: 'add', payload });
+          },
+          { type: 'poll', delay: 1000 },
+        ],
+      },
+    });
+    app.start();
+
+    app._store.dispatch({ type: 'count/pollAdd-start', payload: 2 });
+
+    setTimeout(() => {
+      // second start should not work
+      app._store.dispatch({ type: 'count/pollAdd-start', payload: 3 });
+      app._store.dispatch({ type: 'count/pollAdd-stop' });
+      expect(app._store.getState().count).toEqual(6);
+      done();
+    }, 3000);
+  });
+
+  it('type: poll, start many time 2', done => {
+    const app = create();
+    app.model({
+      namespace: 'count',
+      state: 0,
+      reducers: {
+        add(state, { payload }) {
+          return state + payload || 1;
+        },
+      },
+      effects: {
+        pollAdd: [
+          function*(_, { put }) {
+            yield put({ type: 'add', payload: 1 });
+          },
+          { type: 'poll', delay: 1000 },
+        ],
+      },
+    });
+    app.start();
+
+    app._store.dispatch({ type: 'count/pollAdd-start' });
+    // second start should not work
+    app._store.dispatch({ type: 'count/pollAdd-start' });
+
+    setTimeout(() => {
+      app._store.dispatch({ type: 'count/pollAdd-stop' });
+      expect(app._store.getState().count).toEqual(3);
+      done();
+    }, 3000);
+  });
+
+  it('type: poll, start and stop many time', done => {
+    const app = create();
+    app.model({
+      namespace: 'count',
+      state: 0,
+      reducers: {
+        add(state, { payload }) {
+          return state + payload || 1;
+        },
+      },
+      effects: {
+        pollAdd: [
+          function*(_, { put }) {
+            yield put({ type: 'add', payload: 1 });
+          },
+          { type: 'poll', delay: 1000 },
+        ],
+      },
+    });
+    app.start();
+
+    app._store.dispatch({ type: 'count/pollAdd-start' });
+    app._store.dispatch({ type: 'count/pollAdd-stop' });
+    app._store.dispatch({ type: 'count/pollAdd-start' });
+
+    setTimeout(() => {
+      app._store.dispatch({ type: 'count/pollAdd-stop' });
+      expect(app._store.getState().count).toEqual(3);
+      done();
+    }, 2000);
+  });
+
   xit('nonvalid type', () => {
     const app = create();
     app.model({
@@ -392,7 +609,7 @@ describe('effects', () => {
       effects: {
         addDelay: [
           function*() {
-            console.log(1);
+            yield console.log(1);
           },
           { type: 'nonvalid' },
         ],
@@ -401,9 +618,7 @@ describe('effects', () => {
 
     expect(() => {
       app.start();
-    }).toThrow(
-      /app.start: effect type should be takeEvery, takeLatest, throttle or watcher/
-    );
+    }).toThrow(/app.start: effect type should be takeEvery, takeLatest, throttle or watcher/);
   });
 
   it('onEffect', done => {

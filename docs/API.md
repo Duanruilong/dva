@@ -307,7 +307,7 @@ model's namespace.
 
 ### state
 
-models's initial state, it's priority is lower then `opts.initialState` in `dva()`.
+models's initial state, it's priority is lower than `opts.initialState` in `dva()`.
 
 e.g.
 
@@ -343,6 +343,7 @@ type includes:
 * `takeLatest`
 * `throttle`
 * `watcher`
+* `poll`
 
 View https://github.com/dvajs/dva/blob/master/packages/dva-core/test/effects.test.js for details.
 
